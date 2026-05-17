@@ -216,3 +216,19 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# VS Code
+.vscode/
+
+# Virtual environment
+venv/
+.venv/
+
+# Mac/Windows artifacts
+.DS_Store
+Thumbs.db
+
+# Local environment variables
+.env
+
+
