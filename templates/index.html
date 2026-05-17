@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Конструктор SLA-соглашений</title>
+
+  <!-- Tailwind CSS через CDN. На проде так делать нельзя (большой размер),
+       но для MVP — самый быстрый способ начать без сборки. -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Alpine.js — лёгкая библиотека для реактивности (15 КБ).
+       defer — загрузить, но выполнить после парсинга HTML. -->
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+  <!-- Наши подсказки из tooltips.js -->
+  <script src="{{ url_for('static', filename='js/tooltips.js') }}"></script>
+
+  <style>
+    /* Подсвечиваем поля с ошибкой валидации */
+    .field-error { border-color: #DC2626 !important; }
+    /* Чуть мягче кнопки в заблокированном состоянии */
+    .btn-disabled { opacity: 0.5; cursor: not-allowed; }
+  </style>
+</head>
+
+<body class="bg-slate-50 text-slate-900 min-h-screen">
+
+  <!-- Главный контейнер. x-data — корневой объект Alpine со всем состоянием. -->
+  <div
+    x-data="slaBuilder()"
+    x-init="init()"
+    class="max-w-3xl mx-auto px-4 py-8"
+  >
+
+    <!-- ШАПКА -->
+    <header class="mb-8">
+      <p class="text-xs font-semibold uppercase tracking-widest text-orange-600 mb-2">
+        LegalTech · MVP
+      </p>
+      <h1 class="text-3xl font-bold text-slate-900 mb-2">
+        Конструктор SLA-соглашений
+      </h1>
+      <p class="text-slate-600">
+        Пошаговое заполнение соглашения об уровне обслуживания.
+      </p>
+    </header>
+
+    <!-- ЧЕКБОКС СОГЛАСИЯ НА ОБРАБОТКУ ПДН -->
+    <!-- x-show прячет блок, когда consentGiven = true -->
+    <div x-show="!consentGiven" class="bg-white border border-slate-200 rounded-lg p-6 mb-6">
+      <h2 class="text-lg font-semibold mb-3">Перед началом</h2>
+      <p class="text-sm text-slate-600 mb-4">
+        Для работы конструктора требуется ваше согласие на обработку
+        вводимых данных. Данные не сохраняются на сервере и удаляются
+        сразу после генерации договора.
+      </p>
+      <label class="flex items-start gap-3 cursor-pointer">
+        <input type="checkbox" x-model="consentChecked" class="mt-1">
+        <span class="text-sm">
+          Я ознакомлен с
+          <a href="/static/docs/privacy.docx" class="text-blue-600 underline">Политикой обработки персональных данных</a>
+          и
+          <a href="/static/docs/terms.docx" class="text-blue-600 underline">Пользовательским соглашением</a>,
+          согласен на обработку моих персональных данных в указанных в них целях.
+        </span>
+      </label>
+      <button
+        @click="acceptConsent()"
+        :disabled="!consentChecked"
+        :class="consentChecked ? 'bg-slate-900 hover:bg-slate-800' : 'btn-disabled bg-slate-400'"
+        class="mt-4 px-5 py-2 text-white text-sm font-medium rounded-md transition"
+      >
+        Начать
+      </button>
+    </div>
+
+    <!-- ОСНОВНАЯ ФОРМА (показывается после принятия согласия) -->
+    <div x-show="consentGiven">
+
+      <!-- Прогресс заполнения -->
+      <div class="bg-white border border-slate-200 rounded-lg p-4 mb-6">
+        <div class="flex justify-between text-sm mb-2">
+          <span class="font-medium">Заполнено существенных условий</span>
+          <span class="font-mono" x-text="`${filledCount}/${totalRequired}`"></span>
+        </div>
+        <div class="w-full bg-slate-200 rounded-full h-2">
+          <div
+            class="bg-orange-500 h-2 rounded-full transition-all"
+            :style="`width: ${(filledCount / totalRequired) * 100}%`"
+          ></div>
+        </div>
+      </div>
+
+      <!-- ============ БЛОК 1. Реквизиты сторон ============ -->
+      <section class="bg-white border border-slate-200 rounded-lg p-6 mb-4">
+        <h2 class="text-xl font-semibold mb-1">1. Реквизиты сторон</h2>
+        <p class="text-sm text-slate-500 mb-4">Идентификация Исполнителя и Заказчика.</p>
+
+        <!-- Исполнитель -->
+        <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Исполнитель</p>
+        <div class="mb-4">
+          <label class="flex items-center gap-1 text-sm font-medium mb-1">
+            Наименование
+            <button @click="showTip('executor_name')" type="button" class="text-blue-600 text-xs">ⓘ</button>
+          </label>
+          <input
+            type="text"
+            x-model="form.ИСПОЛНИТЕЛЬ_НАИМЕНОВАНИЕ"
+            class="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+            placeholder="ООО «Технологии будущего»"
+          >
+        </div>
+        <div class="mb-4">
+          <label class="flex items-center gap-1 text-sm font-medium mb-1">
+            ФИО подписанта
+            <button @click="showTip('executor_fio')" type="button" class="text-blue-600 text-xs">ⓘ</button>
+          </label>
+          <input
+            type="text"
+            x-model="form.ИСПОЛНИТЕЛЬ_ФИО"
+            class="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+            placeholder="Иванов Иван Иванович"
+          >
+        </div>
+        <div class="grid grid-cols-2 gap-4 mb-6">
+          <div>
+            <label class="text-sm font-medium mb-1 block">ИНН</label>
+            <input
+              type="text"
+              x-model="form.ИСПОЛНИТЕЛЬ_ИНН"
+              class="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+              placeholder="7707083893"
+            >
+          </div>
+          <div>
+            <label class="text-sm font-medium mb-1 block">ОГРН</label>
+            <input
+              type="text"
+              x-model="form.ИСПОЛНИТЕЛЬ_ОГРН"
+              class="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+              placeholder="1027700132195"
+            >
+          </div>
+        </div>
+
+        <!-- Заказчик -->
+        <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Заказчик</p>
+        <div class="mb-4">
+          <label class="flex items-center gap-1 text-sm font-medium mb-1">
+            Наименование
+            <button @click="showTip('customer_name')" type="button" class="text-blue-600 text-xs">ⓘ</button>
+          </label>
+          <input
+            type="text"
+            x-model="form.ЗАКАЗЧИК_НАИМЕНОВАНИЕ"
+            class="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+            placeholder="АО «Финансовая компания»"
+          >
+        </div>
+        <div class="mb-4">
+          <label class="flex items-center gap-1 text-sm font-medium mb-1">
+            ФИО подписанта
+            <button @click="showTip('customer_fio')" type="button" class="text-blue-600 text-xs">ⓘ</button>
+          </label>
+          <input
+            type="text"
+            x-model="form.ЗАКАЗЧИК_ФИО"
+            class="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+            placeholder="Петров Пётр Петрович"
+          >
+        </div>
+        <div class="grid grid-cols-2 gap-4 mb-6">
+          <div>
+            <label class="text-sm font-medium mb-1 block">ИНН</label>
+            <input
+              type="text"
+              x-model="form.ЗАКАЗЧИК_ИНН"
+              class="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+              placeholder="7728168971"
+            >
+          </div>
+          <div>
+            <label class="text-sm font-medium mb-1 block">ОГРН</label>
+            <input
+              type="text"
+              x-model="form.ЗАКАЗЧИК_ОГРН"
+              class="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+              placeholder="1027700067328"
+            >
+          </div>
+        </div>
+
+        <!-- Место и дата -->
+        <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Место и дата</p>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="text-sm font-medium mb-1 block">Город заключения</label>
+            <input
+              type="text"
+              x-model="form.ГОРОД"
+              class="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+              placeholder="Казань"
+            >
+          </div>
+          <div>
+            <label class="text-sm font-medium mb-1 block">Дата договора</label>
+            <input
+              type="text"
+              x-model="form.ДАТА_ДОГОВОРА"
+              class="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+              placeholder="01 июня 2025"
+            >
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ БЛОК 2. Предмет договора ============ -->
+      <section class="bg-white border border-slate-200 rounded-lg p-6 mb-4">
+        <h2 class="text-xl font-semibold mb-1">2. Предмет договора</h2>
+        <p class="text-sm text-slate-500 mb-4">Описание оказываемой ИТ-услуги — первое существенное условие SLA.</p>
+
+        <div>
+          <label class="flex items-center gap-1 text-sm font-medium mb-1">
+            Описание услуги
+            <button @click="showTip('service_description')" type="button" class="text-blue-600 text-xs">ⓘ</button>
+          </label>
+          <textarea
+            x-model="form.ОПИСАНИЕ_УСЛУГИ"
+            rows="3"
+            class="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+            placeholder="Услуги по сопровождению корпоративной системы..."
+          ></textarea>
+        </div>
+      </section>
+
+      <!-- ============ БЛОК 3. Параметры качества ============ -->
+      <section class="bg-white border border-slate-200 rounded-lg p-6 mb-4">
+        <h2 class="text-xl font-semibold mb-1">3. Параметры качества (SLA-метрики)</h2>
+        <p class="text-sm text-slate-500 mb-4">Количественные показатели — второе существенное условие SLA.</p>
+
+        <div class="grid grid-cols-3 gap-4">
+          <div>
+            <label class="flex items-center gap-1 text-sm font-medium mb-1">
+              Uptime, %
+              <button @click="showTip('uptime')" type="button" class="text-blue-600 text-xs">ⓘ</button>
+            </label>
+            <input
+              type="text"
+              x-model="form.UPTIME_ПРОЦЕНТ"
+              class="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+              placeholder="99.5"
+            >
+          </div>
+          <div>
+            <label class="flex items-center gap-1 text-sm font-medium mb-1">
+              RTO, часов
+              <button @click="showTip('rto')" type="button" class="text-blue-600 text-xs">ⓘ</button>
+            </label>
+            <input
+              type="text"
+              x-model="form.RTO_ЧАСЫ"
+              class="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+              placeholder="4"
+            >
+          </div>
+          <div>
+            <label class="flex items-center gap-1 text-sm font-medium mb-1">
+              RPO, часов
+              <button @click="showTip('rpo')" type="button" class="text-blue-600 text-xs">ⓘ</button>
+            </label>
+            <input
+              type="text"
+              x-model="form.RPO_ЧАСЫ"
+              class="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+              placeholder="1"
+            >
+          </div>
+        </div>
+      </section>
+
+<!-- ============ БЛОК 4. Стоимость услуг ============ -->
+      <section class="bg-white border border-slate-200 rounded-lg p-6 mb-4">
+        <h2 class="text-xl font-semibold mb-1">4. Стоимость услуг</h2>
+        <p class="text-sm text-slate-500 mb-4">Размер ежемесячного платежа за оказание услуг.</p>
+
+        <div>
+          <label class="text-sm font-medium mb-1 block">Стоимость за отчётный период, руб.</label>
+          <input
+            type="text"
+            x-model="form.СТОИМОСТЬ_СУММА"
+            class="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+            placeholder="250 000"
+          >
+        </div>
+      </section>
+
+
+
+
+      <!-- ============ БЛОК 5. Ответственность ============ -->
+      <section class="bg-white border border-slate-200 rounded-lg p-6 mb-6">
+        <h2 class="text-xl font-semibold mb-1">4. Ответственность сторон</h2>
+        <p class="text-sm text-slate-500 mb-4">Service credits и liability cap — повышенное правовое внимание.</p>
+
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="flex items-center gap-1 text-sm font-medium mb-1">
+              Service credit, % от стоимости
+              <button @click="showTip('service_credits')" type="button" class="text-blue-600 text-xs">ⓘ</button>
+            </label>
+            <input
+              type="text"
+              x-model="form.SC_РАЗМЕР1"
+              class="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+              placeholder="10"
+            >
+          </div>
+          <div>
+            <label class="flex items-center gap-1 text-sm font-medium mb-1">
+              Liability cap, месяцев услуги
+              <button @click="showTip('liability_cap')" type="button" class="text-blue-600 text-xs">ⓘ</button>
+            </label>
+            <input
+              type="text"
+              x-model="form.LC_МЕСЯЦЕВ"
+              class="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+              placeholder="3"
+            >
+          </div>
+        </div>
+      </section>
+
+      <!-- КНОПКА ГЕНЕРАЦИИ -->
+      <div class="bg-white border border-slate-200 rounded-lg p-6 mb-6">
+        <p class="text-sm text-slate-600 mb-3" x-show="!allFilled">
+          ⚠ Кнопка «Скачать» активируется, когда все обязательные поля заполнены.
+        </p>
+        <p class="text-sm text-emerald-700 mb-3" x-show="allFilled">
+          ✓ Все существенные условия SLA заполнены. Документ готов к генерации.
+        </p>
+
+        <button
+          @click="generateDoc()"
+          :disabled="!allFilled || isGenerating"
+          :class="allFilled && !isGenerating ? 'bg-emerald-600 hover:bg-emerald-700' : 'btn-disabled bg-slate-400'"
+          class="w-full px-5 py-3 text-white font-medium rounded-md transition"
+        >
+          <span x-show="!isGenerating">Сгенерировать и скачать договор</span>
+          <span x-show="isGenerating">Генерация...</span>
+        </button>
+
+        <p x-show="errorMessage" x-text="errorMessage" class="mt-3 text-sm text-red-600"></p>
+      </div>
+    </div>
+
+    <!-- ПОДВАЛ -->
+    <footer class="text-xs text-slate-500 text-center mt-8 pb-4">
+      <p>MVP · Образовательный проект · Цифровая юриспруденция · 2026</p>
+      <p class="mt-1">
+        <a href="/static/docs/privacy.docx" class="underline">Политика ПДн</a> ·
+        <a href="/static/docs/terms.docx" class="underline">Соглашение</a> ·
+        <a href="/static/docs/consent.docx" class="underline">Согласие</a>
+      </p>
+    </footer>
+
+    <!-- МОДАЛКА С ПОДСКАЗКОЙ -->
+    <div
+      x-show="activeTip"
+      x-cloak
+      @click.self="activeTip = null"
+      class="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50"
+    >
+      <div class="bg-white rounded-lg max-w-lg w-full p-6">
+        <div class="flex justify-between items-start mb-3">
+          <h3 class="text-lg font-semibold" x-text="activeTip?.short"></h3>
+          <button @click="activeTip = null" class="text-slate-400 hover:text-slate-700 text-xl leading-none">×</button>
+        </div>
+        <p x-show="activeTip?.long" x-text="activeTip?.long" class="text-sm text-slate-700 whitespace-pre-line mb-3"></p>
+        <div x-show="activeTip?.example" class="bg-slate-50 border border-slate-200 rounded p-3 text-sm mb-3">
+          <p class="text-xs font-semibold text-slate-500 mb-1">ПРИМЕР</p>
+          <p class="text-slate-800" x-text="activeTip?.example"></p>
+        </div>
+        <p x-show="activeTip?.legal" class="text-xs text-slate-500 italic" x-text="activeTip?.legal"></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ЛОГИКА (Alpine.js функция) -->
+  <script>
+    function slaBuilder() {
+      return {
+        // --- Состояние ---
+        consentChecked: false,
+        consentGiven: false,
+        activeTip: null,
+        isGenerating: false,
+        errorMessage: '',
+
+        form: {
+          // Блок 1: Реквизиты сторон
+          ИСПОЛНИТЕЛЬ_НАИМЕНОВАНИЕ: '',
+          ИСПОЛНИТЕЛЬ_ФИО: '',
+          ИСПОЛНИТЕЛЬ_ИНН: '',
+          ИСПОЛНИТЕЛЬ_ОГРН: '',
+          ЗАКАЗЧИК_НАИМЕНОВАНИЕ: '',
+          ЗАКАЗЧИК_ФИО: '',
+          ЗАКАЗЧИК_ИНН: '',
+          ЗАКАЗЧИК_ОГРН: '',
+
+          // Место и дата
+          ГОРОД: '',
+          ДАТА_ДОГОВОРА: '',
+
+          // Блок 2: Предмет
+          ОПИСАНИЕ_УСЛУГИ: '',
+
+          // Блок 3: Параметры качества
+          UPTIME_ПРОЦЕНТ: '',
+          RTO_ЧАСЫ: '',
+          RPO_ЧАСЫ: '',
+
+          // Блок 4: Стоимость
+          СТОИМОСТЬ_СУММА: '',
+
+          // Блок 5: Ответственность
+          SC_РАЗМЕР1: '',
+          LC_МЕСЯЦЕВ: '',
+        },
+
+        // --- Вычисляемые свойства ---
+        // Сколько полей уже заполнено
+        get filledCount() {
+          return Object.values(this.form).filter(v => v.trim() !== '').length;
+        },
+
+        // Всего обязательных полей
+        get totalRequired() {
+          return Object.keys(this.form).length;
+        },
+
+        // Все ли поля заполнены
+        get allFilled() {
+          return this.filledCount === this.totalRequired;
+        },
+
+        // --- Методы ---
+        init() {
+          // Можно подгрузить сохранённое состояние из sessionStorage,
+          // если потребуется. Для MVP пока пусто.
+        },
+
+        acceptConsent() {
+          if (this.consentChecked) {
+            this.consentGiven = true;
+          }
+        },
+
+        showTip(key) {
+          this.activeTip = TOOLTIPS[key] || null;
+        },
+
+        async generateDoc() {
+          this.errorMessage = '';
+          this.isGenerating = true;
+
+          try {
+            const response = await fetch('/generate', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(this.form),
+            });
+
+            if (!response.ok) {
+              // Сервер ответил ошибкой — читаем JSON с описанием
+              const errorData = await response.json();
+              throw new Error(errorData.error || 'Ошибка генерации');
+            }
+
+            // Сервер вернул .docx — скачиваем
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'SLA_договор.docx';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            window.URL.revokeObjectURL(url);
+
+          } catch (e) {
+            this.errorMessage = e.message;
+          } finally {
+            this.isGenerating = false;
+          }
+        },
+      };
+    }
+  </script>
+
+  <style>
+    /* Скрываем элементы с x-cloak до загрузки Alpine, чтобы модалка
+       не мелькала при загрузке страницы. */
+    [x-cloak] { display: none !important; }
+  </style>
+</body>
+</html>
